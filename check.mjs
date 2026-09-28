@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { trip } from './trip.mjs';
+const html=await readFile('dist/index.html','utf8');
+const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);
+assert.equal(new Set(ids).size,ids.length,'Duplicate HTML IDs');
+for(const [,hash] of html.matchAll(/href="#([^"]+)"/g)) assert(ids.includes(hash),`Missing anchor ${hash}`);
+for(const [,file] of html.matchAll(/(?:src|href)="\.\/([^"]+)"/g)) await readFile(`dist/${file}`);
+assert.equal(trip.cities.reduce((s,c)=>s+c.nights,0),21,'Featured itinerary must total 21 nights');
+assert.equal(trip.cities.length,7);
+assert(html.includes('approximately 22 days'),'Explain 21 nights versus 22 days');
+assert(!/<form\b/i.test(html),'Use Tally, not a custom response form');
+assert(html.includes('International flights from the U.S.'));
+if(process.argv.includes('--release')) assert(trip.tallyUrl,'Connect the published Tally form before release');
+console.log('Passed: itinerary arithmetic, internal links, public assets, airfare distinction, Tally-only collection.');
+assert.equal((html.match(/<img\b/g)||[]).length,2,'Only two representative lodging photographs');
+assert.equal(trip.cities.reduce((s,c)=>s+c.plans.length,0)+1,22,'Day-by-day plan must cover all 22 days');
+for(const [i,key] of [[0,'low'],[1,'high']]){
+  assert.equal(trip.budget[0][key],trip.cities.reduce((s,c)=>s+c.hostelBudget[i]*c.nights,0),'Lodging subtotal');
+  assert.equal(trip.budget[1][key],trip.cities.reduce((s,c)=>s+c.foodBudget[i]*c.nights,0)+trip.cities.at(-1).foodBudget[i],'Food subtotal includes departure day');
+  assert.equal(trip.budget[2][key],trip.connections.reduce((s,c)=>s+c.cost[i],0),'Transport subtotal');
+}
+assert.equal(trip.budget.reduce((s,b)=>s+b.target,0),2600,'Target allocations');
+assert(html.indexOf('id="itinerary"')<html.indexOf('id="routes"'),'Featured itinerary comes first');
+console.log('Passed: lodging-only photos, 22-day schedule, category totals, featured route order.');
+const {shortRoutes,shortBudget}=await import('./additions.mjs');
+for(const r of shortRoutes) assert.equal(r.stops.reduce((sum,[,n])=>sum+n,0),14);
+for(const i of [0,1]) assert.equal(shortBudget.reduce((sum,row)=>sum+row[i+1],0),shortRoutes[0].cost[i]);
+assert.equal(shortRoutes[0].stops.length,5);
+assert.equal(shortRoutes[1].stops.length,4);
+assert(html.includes('$3,100–$3,450'));
+for(const id of ['two-weeks','finances','airfare','group-size','quote-0']) assert(ids.includes(id));
+console.log('Passed: short-route nights, London entry count, new budgets and airfare totals.');
